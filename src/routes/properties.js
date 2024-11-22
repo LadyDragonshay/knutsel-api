@@ -12,8 +12,8 @@ const router = express.Router();
 router.get("/", async (req, res, next) => {
   console.log("GET /properties");
   try {
-    const { location, pricePerNight } = req.query;
-    const properties = await getProperties(location, pricePerNight);
+    const { hostId, location, pricePerNight } = req.query;
+    const properties = await getProperties(hostId, location, pricePerNight);
     res.status(200).json(properties);
   } catch (err) {
     next(err);
@@ -79,12 +79,18 @@ router.post("/", auth, async (req, res, next) => {
       hostId,
       rating,
     });
-    return res.status(201).json({
-      message: `Property successfully created`,
-      property: newProperty,
-    });
-  } catch (err) {
-    next(err);
+    if (newProperty !== null) {
+      return res.status(201).json({
+        message: "Property successfully created",
+        review: newProperty,
+      });
+    } else {
+      return res.status(400).json({
+        message: "Something went wrong",
+      });
+    }
+  } catch (error) {
+    next(error);
   }
 });
 

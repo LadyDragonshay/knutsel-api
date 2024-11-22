@@ -6,52 +6,84 @@ import createUser from "../services/users/createUser.js";
 import getUserById from "../services/users/getUserById.js";
 import deleteUserById from "../services/users/deleteUserById.js";
 import updateUserById from "../services/users/updateUserById.js";
+import getUserByName from "../services/users/getUserByName.js";
+import getUserByUsername from "../services/users/getUserByUsername.js";
 
 const router = express.Router();
 
-router.get("/", async (req, res, next) => {
-  console.log("GET /users - Request received:", { query: req.query });
-  try {
+// Error handler wrapper to avoid repetitive try-catch blocks
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
+// Get users with optional filtering
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
     const { email, username } = req.query;
     const users = await getUsers(email, username);
-    console.log(`Found ${users.length} users`);
 
-    const usersWithoutPassword = users.map(
-      ({ password, ...userWithoutPassword }) => userWithoutPassword
-    );
-    res.status(200).json(usersWithoutPassword);
-  } catch (error) {
-    console.error("Error in GET /users:", error);
-    next(error);
-  }
-});
+    const sanitizedUsers = users.map(({ password, ...user }) => user);
+    res.json(sanitizedUsers);
+  })
+);
 
-router.get("/:id", async (req, res, next) => {
-  console.log("GET /users/:id - Request received:", { params: req.params });
-  try {
-    const { id } = req.params;
-    const user = await getUserById(id);
-    console.log("User found:", user ? "Yes" : "No");
+// Get user by ID
+router.get(
+  "/id/:id",
+  asyncHandler(async (req, res) => {
+    const user = await getUserById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        message: `User with id ${req.params.id} not found`,
+      });
+    }
+
+    const { password, ...sanitizedUser } = user;
+    res.json(sanitizedUser);
+  })
+);
+
+// Get user by username or name
+router.get(
+  "/search",
+  asyncHandler(async (req, res) => {
+    const { username, name } = req.query;
+
+    if (!username && !name) {
+      return res.status(400).json({
+        message: "Please provide either username or name parameter",
+      });
+    }
+
+    const user = username
+      ? await getUserByUsername(username)
+      : await getUserByName(name);
 
     if (!user) {
-      console.log(`User with id ${id} not found`);
-      res.status(404).json({ message: `User with id ${id} was not found` });
-    } else {
-      res.status(200).json(user);
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
-  } catch (err) {
-    console.error(`Error in GET /users/${req.params.id}:`, err);
-    next(err);
-  }
-});
 
-router.post("/", auth, async (req, res, next) => {
-  console.log("POST /users - Request received:", {
-    body: { ...req.body, password: "***" }, // Hide password in logs
-  });
-  try {
+    const { password, ...sanitizedUser } = user;
+    res.json(sanitizedUser);
+  })
+);
+
+// Create new user
+router.post(
+  "/",
+  auth,
+  asyncHandler(async (req, res) => {
     const { username, password, name, email, phoneNumber, profilePicture } =
       req.body;
+
+    // Basic validation
+    if (!username || !password || !email) {
+      return res.status(400).json({
+        message: "Username, password, and email are required",
+      });
+    }
 
     const newUser = await createUser(
       username,
@@ -61,92 +93,66 @@ router.post("/", auth, async (req, res, next) => {
       phoneNumber,
       profilePicture
     );
-    console.log("User creation result:", newUser ? "Success" : "Failed");
 
-    if (newUser) {
-      console.log(`New user created with id: ${newUser.id}`);
-      res.status(201).json({
-        message: `User with id ${newUser.id} successfully added`,
-        user: newUser,
-      });
-    } else {
-      console.warn(
-        "User creation failed - no error thrown but no user returned"
-      );
-      res.status(400).json({
-        message: "User creation error",
+    if (!newUser) {
+      return res.status(400).json({
+        message: "User creation failed",
       });
     }
-  } catch (error) {
-    console.error("User creation error:", {
-      error: error.message,
-      stack: error.stack,
-    });
-    next(error);
-  }
-});
 
-router.put("/:id", auth, async (req, res, next) => {
-  console.log("PUT /users/:id - Request received:", {
-    params: req.params,
-    body: { ...req.body, password: "***" }, // Hide password in logs
-  });
-  try {
+    const { password: _, ...sanitizedUser } = newUser;
+    res.status(201).json({
+      message: `User successfully created with id ${newUser.id}`,
+      user: sanitizedUser,
+    });
+  })
+);
+
+// Update user
+router.put(
+  "/:id",
+  auth,
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { name, username, password, email, phoneNumber, profilePicture } =
-      req.body;
-
-    const updatedUser = await updateUserById(id, {
+    const updateData = {
+      ...req.body,
       id,
-      name,
-      username,
-      password,
-      email,
-      phoneNumber,
-      profilePicture,
-    });
-    console.log("User update result:", updatedUser ? "Success" : "Not Found");
+    };
 
-    if (updatedUser) {
-      console.log(`User ${id} successfully updated`);
-      res.status(200).send({
-        message: `User with id ${id} successfully updated`,
-      });
-    } else {
-      console.log(`Update failed - User ${id} not found`);
-      res.status(404).json({
+    const updatedUser = await updateUserById(id, updateData);
+
+    if (!updatedUser) {
+      return res.status(404).json({
         message: `User with id ${id} not found`,
       });
     }
-  } catch (error) {
-    console.error(`Error updating user ${req.params.id}:`, error);
-    next(error);
-  }
-});
 
-router.delete("/:id", auth, async (req, res, next) => {
-  console.log("DELETE /users/:id - Request received:", { params: req.params });
-  try {
+    res.json({
+      message: `User with id ${id} successfully updated`,
+    });
+  })
+);
+
+// Delete user
+router.delete(
+  "/:id",
+  auth,
+  asyncHandler(async (req, res) => {
     const { id } = req.params;
     const deletedUser = await deleteUserById(id);
-    console.log("User deletion result:", deletedUser ? "Success" : "Not Found");
 
-    if (deletedUser) {
-      console.log(`User ${id} successfully deleted`);
-      res.status(200).send({
-        message: `User with id ${id} successfully deleted`,
-        user: deletedUser,
-      });
-    } else {
-      console.log(`Deletion failed - User ${id} not found`);
-      res.status(404).json({
+    if (!deletedUser) {
+      return res.status(404).json({
         message: `User with id ${id} not found`,
       });
     }
-  } catch (error) {
-    console.error(`Error deleting user ${req.params.id}:`, error);
-    next(error);
-  }
-});
+
+    const { password, ...sanitizedUser } = deletedUser;
+    res.json({
+      message: `User with id ${id} successfully deleted`,
+      user: sanitizedUser,
+    });
+  })
+);
 
 export default router;

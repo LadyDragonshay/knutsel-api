@@ -48,7 +48,7 @@ router.post("/", auth, async (req, res, next) => {
 
     const newAmenity = await createAmenity({ name });
     res.status(201).send({
-      message: `Account successfully created`,
+      message: `Amenity successfully created`,
       newAmenity,
     });
   } catch (err) {

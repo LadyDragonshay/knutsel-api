@@ -20,8 +20,16 @@ import auth from "./middleware/auth.js";
 
 // Initialize environment variables
 dotenv.config();
-
+// Initialize database connection
+const prisma = new PrismaClient();
+// Initialize express app
 const app = express();
+
+// Test database connection
+prisma
+  .$connect()
+  .then(() => console.log("Database connection successful"))
+  .catch((e) => console.error("Database connection failed", e));
 
 // Initialize Sentry
 Sentry.init({
@@ -51,7 +59,7 @@ app.use("/login", loginRouter);
 
 // Basic routes
 app.get("/", (req, res) => {
-  res.send("Hello world!");
+  res.send("Welcome tho my Booking-Api!");
 });
 
 // Sentry test route
@@ -74,25 +82,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize database connection
-const prisma = new PrismaClient();
-
 // Start server
 app.listen(3001, () => {
   console.log("Server is listening on port 3001");
-});
-
-// Handle graceful shutdown
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received. Shutting down gracefully...");
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  console.log("SIGINT received. Shutting down gracefully...");
-  await prisma.$disconnect();
-  process.exit(0);
 });
 
 export default app;

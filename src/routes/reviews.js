@@ -52,12 +52,18 @@ router.post("/", auth, async (req, res, next) => {
       rating,
       comment,
     });
-    return res.status(201).json({
-      message: `Review successfully created`,
-      review: newReview,
-    });
-  } catch (err) {
-    next(err);
+    if (newReview !== null) {
+      return res.status(201).json({
+        message: "Review successfully created",
+        review: newReview,
+      });
+    } else {
+      return res.status(400).json({
+        message: "Something went wrong",
+      });
+    }
+  } catch (error) {
+    next(error);
   }
 });
 
